@@ -16,7 +16,6 @@ repositories {
 
 dependencies {
     implementation(libs.bundles.ktor)
-    implementation(libs.bundles.ktor.client)
 
     implementation(libs.bundles.koin)
     implementation(libs.koin.annotation)

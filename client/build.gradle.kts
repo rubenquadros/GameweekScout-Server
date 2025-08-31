@@ -10,15 +10,13 @@ repositories {
 }
 
 dependencies {
+    implementation(libs.bundles.ktor.client)
+
     implementation(libs.bundles.koin)
     implementation(libs.koin.annotation)
     ksp(libs.koin.ksp)
 
     implementation(libs.coroutines.jvm)
-
-    implementation(libs.ktor.client)
-
-    implementation(project(":client"))
 
     testImplementation(libs.koin.test)
     testImplementation(libs.kotlin.test)
@@ -27,4 +25,7 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+}
+kotlin {
+    jvmToolchain(17)
 }

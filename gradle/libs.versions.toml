@@ -40,7 +40,7 @@ kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotl
 
 [bundles]
 ktor = ["ktor-content-negotiation", "ktor-core-jvm", "ktor-serialization", "ktor-netty", "ktor-logback", "ktor-resources", "ktor-status-pages"]
-ktor-client = ["ktor-client", "ktor-client-okhttp", "ktor-client-content-negotiation", "ktor-client-logging"]
+ktor-client = ["ktor-client", "ktor-client-okhttp", "ktor-client-content-negotiation", "ktor-client-logging", "ktor-serialization"]
 koin = ["koin-core", "koin-ktor", "koin-logger"]
 
 [plugins]
