@@ -23,6 +23,8 @@ dependencies {
 
     implementation(libs.coroutines.jvm)
 
+    implementation(project(":client"))
+    implementation(project(":ai"))
 
     testImplementation(libs.koin.test)
     testImplementation(libs.kotlin.test)

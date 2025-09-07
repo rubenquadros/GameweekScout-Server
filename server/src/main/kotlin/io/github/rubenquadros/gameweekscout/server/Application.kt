@@ -9,5 +9,8 @@ fun main() {
 }
 
 private fun Application.module() {
-
+    configureDi()
+    configureSerialization()
+    configureRouting()
+    configureStatusPages()
 }

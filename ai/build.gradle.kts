@@ -1,17 +1,29 @@
 plugins {
-    id("java")
+    alias(libs.plugins.org.jetbrains.kotlin.jvm)
+    alias(libs.plugins.ktor)
+    alias(libs.plugins.kotlinx.serialization)
+    alias(libs.plugins.ksp)
 }
-
-group = "io.github.rubenquadros.gameweekscout.server"
-version = "unspecified"
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    testImplementation(platform("org.junit:junit-bom:5.10.0"))
-    testImplementation("org.junit.jupiter:junit-jupiter")
+    implementation(libs.bundles.koin)
+    implementation(libs.koin.annotation)
+    ksp(libs.koin.ksp)
+
+    implementation(libs.coroutines.jvm)
+
+    implementation(libs.bundles.ktor.client)
+
+    implementation(project(":client"))
+    implementation(project(":fpl"))
+
+    testImplementation(libs.koin.test)
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.coroutines.test)
 }
 
 tasks.test {
