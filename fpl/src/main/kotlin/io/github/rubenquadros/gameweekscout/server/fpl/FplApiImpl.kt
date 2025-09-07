@@ -5,7 +5,6 @@ import io.github.rubenquadros.gameweekscout.server.fpl.model.all.FplElement
 import io.github.rubenquadros.gameweekscout.server.fpl.model.all.FplScoring
 import io.github.rubenquadros.gameweekscout.server.fpl.model.all.FplTeam
 import io.github.rubenquadros.gameweekscout.server.fpl.model.fixture.FplFixture
-import io.github.rubenquadros.gameweekscout.server.fpl.model.player.FplPlayer
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
@@ -24,16 +23,30 @@ internal class FplApiImpl(
         return fplData
     }
 
-    override suspend fun getAllFixtures(): List<FplFixture> {
-        val response = httpClient.get("/api/fixtures")
-
-        return response.body()
-    }
-
     override suspend fun getUpcomingFixtures(): List<FplFixture> {
         val response = httpClient.get("/api/fixtures?future=1")
 
-        return response.body()
+        //get all upcoming fixture
+        val fixtures = response.body<List<FplFixture>>()
+
+        //filter upcoming 6 game weeks
+        val upcomingGameWeek = fixtures.firstOrNull()?.event
+
+        if (upcomingGameWeek == null) return emptyList()
+
+        val nextSixGameWeeks = upcomingGameWeek + 5
+
+        return fixtures.filter {
+            it.event < nextSixGameWeeks
+        }
+    }
+
+    override suspend fun getNextGameWeekFixtures(): List<FplFixture> {
+        val allUpcomingFixtures = getUpcomingFixtures()
+
+        val nextGameWeek = allUpcomingFixtures.firstOrNull()?.event
+
+        return allUpcomingFixtures.filter { it.event == nextGameWeek }
     }
 
     override suspend fun getAllTeams(): List<FplTeam> {
@@ -54,10 +67,34 @@ internal class FplApiImpl(
         return fplData?.elements ?: emptyList()
     }
 
-    override suspend fun getPlayer(id: Int): FplPlayer {
-        val response = httpClient.get("/api/element-summary/$id")
+    override suspend fun getMidFielders(): List<FplElement> {
+        if (fplData == null) refreshData()
 
-        return response.body()
+        return fplData?.elements?.filter { it.elementType == 3 } ?: emptyList()
+    }
+
+    override suspend fun getForwards(): List<FplElement> {
+        if (fplData == null) refreshData()
+
+        return fplData?.elements?.filter { it.elementType == 4 } ?: emptyList()
+    }
+
+    override suspend fun getDefenders(): List<FplElement> {
+        if (fplData == null) refreshData()
+
+        return fplData?.elements?.filter { it.elementType == 2 } ?: emptyList()
+    }
+
+    override suspend fun getGoalkeepers(): List<FplElement> {
+        if (fplData == null) refreshData()
+
+        return fplData?.elements?.filter { it.elementType == 1 } ?: emptyList()
+    }
+
+    override suspend fun getPlayer(id: Int): FplElement? {
+        if (fplData == null) refreshData()
+
+        return fplData?.elements?.firstOrNull { it.id == id }
     }
 
     override suspend fun getScoringData(): FplScoring? {

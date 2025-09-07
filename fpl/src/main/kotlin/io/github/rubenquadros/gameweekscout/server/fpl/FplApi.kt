@@ -5,14 +5,13 @@ import io.github.rubenquadros.gameweekscout.server.fpl.model.all.FplElement
 import io.github.rubenquadros.gameweekscout.server.fpl.model.all.FplScoring
 import io.github.rubenquadros.gameweekscout.server.fpl.model.all.FplTeam
 import io.github.rubenquadros.gameweekscout.server.fpl.model.fixture.FplFixture
-import io.github.rubenquadros.gameweekscout.server.fpl.model.player.FplPlayer
 
 interface FplApi {
     suspend fun refreshData(): FplData?
 
-    suspend fun getAllFixtures(): List<FplFixture>
-
     suspend fun getUpcomingFixtures(): List<FplFixture>
+
+    suspend fun getNextGameWeekFixtures(): List<FplFixture>
 
     suspend fun getAllTeams(): List<FplTeam>
 
@@ -20,7 +19,15 @@ interface FplApi {
 
     suspend fun getAllPlayers(): List<FplElement>
 
-    suspend fun getPlayer(id: Int): FplPlayer
+    suspend fun getMidFielders(): List<FplElement>
+
+    suspend fun getForwards(): List<FplElement>
+
+    suspend fun getDefenders(): List<FplElement>
+
+    suspend fun getGoalkeepers(): List<FplElement>
+
+    suspend fun getPlayer(id: Int): FplElement?
 
     suspend fun getScoringData(): FplScoring?
 }

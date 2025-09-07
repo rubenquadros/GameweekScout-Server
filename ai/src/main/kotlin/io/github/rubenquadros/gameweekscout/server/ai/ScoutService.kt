@@ -95,12 +95,12 @@ internal class ScoutServiceImpl(
 
     private suspend fun executeFunctionCall(functionCall: FunctionCall): JsonObject {
         val functionCallResponse = when (functionCall.name) {
-            fixturesName -> {
-                convertToJsonObject(functionResponse = fplApi.getAllFixtures().map { it.toFixtureEntity() })
-            }
-
             upcomingFixturesName -> {
                 convertToJsonObject(functionResponse = fplApi.getUpcomingFixtures().map { it.toFixtureEntity() })
+            }
+
+            nextGameWeekFixturesName -> {
+                convertToJsonObject(functionResponse = fplApi.getNextGameWeekFixtures().map { it.toFixtureEntity() })
             }
 
             allTeamsName -> {
@@ -117,9 +117,25 @@ internal class ScoutServiceImpl(
                 convertToJsonObject(functionResponse = fplApi.getAllPlayers().map { it.toPlayerEntity() })
             }
 
+            forwardsName -> {
+                convertToJsonObject(functionResponse = fplApi.getForwards().map { it.toPlayerEntity() })
+            }
+
+            midfieldersName -> {
+                convertToJsonObject(functionResponse = fplApi.getMidFielders().map { it.toPlayerEntity() })
+            }
+
+            defendersName -> {
+                convertToJsonObject(functionResponse = fplApi.getDefenders().map { it.toPlayerEntity() })
+            }
+
+            goalkeepersName -> {
+                convertToJsonObject(functionResponse = fplApi.getGoalkeepers().map { it.toPlayerEntity() })
+            }
+
             playerName -> {
                 convertToJsonObject(
-                    functionResponse = fplApi.getPlayer(id = extractId(functionCall.args))
+                    functionResponse = fplApi.getPlayer(id = extractId(functionCall.args))?.toPlayerEntity()
                 )
             }
 

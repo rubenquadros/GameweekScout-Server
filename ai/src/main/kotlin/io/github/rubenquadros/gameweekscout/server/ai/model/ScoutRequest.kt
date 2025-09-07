@@ -57,15 +57,14 @@ data class SystemTool(
 data class FunctionDeclaration(
     val name: String,
     val description: String,
-    val parameters: Schema,
-    val response: JsonObject? = null,
+    val parameters: Schema
 )
 
 @Serializable
 data class Schema(
     val type: String,
-    val properties: Map<String, Property> = emptyMap(),
-    val required: List<String> = emptyList()
+    val properties: Map<String, Property>? = null,
+    val required: List<String>? = null
 )
 
 @Serializable
