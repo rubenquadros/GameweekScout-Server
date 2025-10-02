@@ -8,7 +8,7 @@ import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.request.receive
 import io.ktor.server.resources.Resources
-import io.ktor.server.resources.get
+import io.ktor.server.resources.post
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.routing
@@ -25,7 +25,7 @@ internal fun Application.configureRouting() {
 internal fun Route.mainRoute() {
     val scoutService by inject<ScoutService>()
 
-    get<MainRoute> {
+    post<MainRoute> {
         val body = call.receive<List<Content>>()
         val response = scoutService.getScoutAdvice(body)
 

@@ -47,10 +47,6 @@ application {
     mainClass.set("io.github.rubenquadros.gameweekscout.server.ApplicationKt")
 }
 
-tasks.withType<ShadowJar> {
-    mergeServiceFiles()
-}
-
 configurations {
     testImplementation.get().exclude("org.jetbrains.kotlin", "kotlin-test-junit")
 }

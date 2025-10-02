@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.org.jetbrains.kotlin.jvm)
-    alias(libs.plugins.ktor)
     alias(libs.plugins.kotlinx.serialization)
     alias(libs.plugins.ksp)
 }
@@ -26,6 +25,7 @@ dependencies {
 tasks.test {
     useJUnitPlatform()
 }
+
 kotlin {
     jvmToolchain(17)
 }
