@@ -1,165 +1,92 @@
 package io.github.rubenquadros.gameweekscout.server.ai
 
-import io.github.rubenquadros.gameweekscout.server.ai.instruction.fplTool
-import io.github.rubenquadros.gameweekscout.server.ai.instruction.functions.*
-import io.github.rubenquadros.gameweekscout.server.ai.instruction.scoutInstruction
-import io.github.rubenquadros.gameweekscout.server.ai.model.*
-import io.github.rubenquadros.gameweekscout.server.ai.model.fpl.toFixtureEntity
-import io.github.rubenquadros.gameweekscout.server.ai.model.fpl.toPlayerEntity
-import io.github.rubenquadros.gameweekscout.server.ai.model.fpl.toScoreEntity
-import io.github.rubenquadros.gameweekscout.server.ai.model.fpl.toTeamEntity
+import ai.koog.agents.core.agent.AIAgent
+import ai.koog.agents.core.dsl.builder.forwardTo
+import ai.koog.agents.core.dsl.builder.strategy
+import ai.koog.agents.core.dsl.extension.nodeAppendPrompt
+import ai.koog.agents.core.tools.ToolRegistry
+import ai.koog.agents.core.tools.reflect.tools
+import ai.koog.agents.ext.agent.subgraphWithTask
+import ai.koog.agents.features.eventHandler.feature.handleEvents
+import ai.koog.agents.snapshot.feature.Persistence
+import ai.koog.agents.snapshot.providers.InMemoryPersistenceStorageProvider
+import ai.koog.prompt.executor.clients.google.GoogleModels
+import ai.koog.prompt.executor.llms.all.simpleGoogleAIExecutor
+import io.github.rubenquadros.gameweekscout.server.ai.model.InputProcessResponse
+import io.github.rubenquadros.gameweekscout.server.ai.model.getGeminiConfig
 import io.github.rubenquadros.gameweekscout.server.fpl.FplApi
-import io.ktor.client.*
-import io.ktor.client.call.*
-import io.ktor.client.request.*
-import io.ktor.http.*
-import kotlinx.serialization.json.*
 
 interface ScoutService {
-    suspend fun getScoutAdvice(contents: List<Content>): ScoutResponse?
+    suspend fun getScoutAdvice(input: String): String?
 }
 
 internal class ScoutServiceImpl(
-    private val httpClient: HttpClient,
     private val fplApi: FplApi
 ) : ScoutService {
 
+    private val fplToolsRegistry = ToolRegistry {
+        tools(fplApi)
+    }
+
+    private val memoryStorage = InMemoryPersistenceStorageProvider()
+
+    private val scoutStrategy = strategy<String, String>("fpl-scout") {
+        val inputProcessingPrompt by nodeAppendPrompt<String>("input-process-prompt") {
+            system(inputProcessInstruction)
+        }
+
+        val processInput by subgraphWithTask<String, InputProcessResponse>(
+            name = "input-processor",
+            llmModel = GoogleModels.Gemini2_5FlashLite,
+            assistantResponseRepeatMax = 1
+        ) { input ->
+            """
+                User query: "$input"
+            """.trimIndent()
+        }
+
+        val scoutAdvicePrompt by nodeAppendPrompt<InputProcessResponse>("scout-advice-prompt") {
+            system(scoutAdviceInstruction)
+        }
+
+        val provideSuggestion by subgraphWithTask<InputProcessResponse, String>(
+            name = "scout-advisor",
+            llmModel = GoogleModels.Gemini2_5Flash,
+            tools = fplToolsRegistry.tools,
+            assistantResponseRepeatMax = 5
+        ) { context ->
+            """
+                User query: "${context.originalInput}
+            """.trimIndent()
+        }
+
+        edge(nodeStart forwardTo inputProcessingPrompt)
+        edge(inputProcessingPrompt forwardTo processInput)
+        edge(processInput forwardTo nodeFinish onCondition { !it.shouldProceed } transformed { it.response })
+        edge(processInput forwardTo scoutAdvicePrompt onCondition { it.shouldProceed })
+        edge(scoutAdvicePrompt forwardTo provideSuggestion)
+        edge(provideSuggestion forwardTo nodeFinish)
+    }
+
     private val geminiConfig = getGeminiConfig()
-    private val conversationHistory: MutableList<Content> = mutableListOf()
-    private var scoutResponse: ScoutResponse? = null
 
-    override suspend fun getScoutAdvice(contents: List<Content>): ScoutResponse? {
-        val maxLoops = 5
-        var currentLoop = 0
+    override suspend fun getScoutAdvice(input: String): String? {
+        return runCatching {
+            val agent = AIAgent(
+                strategy = scoutStrategy,
+                promptExecutor = simpleGoogleAIExecutor(apiKey = geminiConfig.apiKey),
+                llmModel = GoogleModels.Gemini2_5Flash,
+                toolRegistry = fplToolsRegistry
+            ) {
+                install(Persistence) {
+                    storage = memoryStorage
+                }
 
-        conversationHistory.apply {
-            clear()
-            addAll(contents)
-        }
-
-        while (currentLoop < maxLoops) {
-            currentLoop++
-
-            scoutResponse = askScout(conversationHistory)
-
-            val functionCalls = getFunctionCallOrNull(scoutResponse!!)
-
-            if (functionCalls.isNullOrEmpty()) break
-
-            //add model response
-            conversationHistory.add(
-                Content(role = "model", parts = scoutResponse?.candidates?.firstOrNull()?.content?.parts ?: emptyList())
-            )
-
-            //execute function calls
-            val toolResponses = functionCalls.map { functionCall ->
-                println("Calling function: ${functionCall.name}")
-                println("Function args: ${functionCall.args.values}")
-
-                val functionResponse = FunctionResponse(
-                    name = functionCall.name,
-                    response = executeFunctionCall(functionCall)
-                )
-
-                Content(role = "tool", parts = listOf(Part(functionResponse = functionResponse)))
+                handleEvents { eventHandler() }
             }
 
-            //add to conversation for new call
-            conversationHistory.addAll(toolResponses)
-        }
+            agent.run(input)
 
-        return scoutResponse
-    }
-
-    private suspend fun askScout(contents: List<Content>): ScoutResponse {
-        return httpClient.post {
-            val apiRequest = ScoutRequest(
-                systemInstruction = scoutInstruction,
-                tools = listOf(fplTool),
-                contents = contents
-            )
-
-            url {
-                appendPathSegments("/${geminiConfig.model}:generateContent")
-                parameters.append("key", geminiConfig.apiKey)
-            }
-
-            setBody(apiRequest)
-
-        }.body<ScoutResponse>()
-    }
-
-    private fun getFunctionCallOrNull(scoutResponse: ScoutResponse): List<FunctionCall>? {
-        return scoutResponse.candidates.firstOrNull()?.content?.parts?.mapNotNull { it.functionCall }?.distinctBy { it.name }
-    }
-
-    private suspend fun executeFunctionCall(functionCall: FunctionCall): JsonObject {
-        val functionCallResponse = when (functionCall.name) {
-            upcomingFixturesName -> {
-                convertToJsonObject(functionResponse = fplApi.getUpcomingFixtures().map { it.toFixtureEntity() })
-            }
-
-            nextGameWeekFixturesName -> {
-                convertToJsonObject(functionResponse = fplApi.getNextGameWeekFixtures().map { it.toFixtureEntity() })
-            }
-
-            allTeamsName -> {
-                convertToJsonObject(functionResponse = fplApi.getAllTeams().map { it.toTeamEntity() })
-            }
-
-            teamName -> {
-                convertToJsonObject(
-                    functionResponse = fplApi.getTeam(id = extractId(functionCall.args))?.toTeamEntity()
-                )
-            }
-
-            allPlayersName -> {
-                convertToJsonObject(functionResponse = fplApi.getAllPlayers().map { it.toPlayerEntity() })
-            }
-
-            forwardsName -> {
-                convertToJsonObject(functionResponse = fplApi.getForwards().map { it.toPlayerEntity() })
-            }
-
-            midfieldersName -> {
-                convertToJsonObject(functionResponse = fplApi.getMidFielders().map { it.toPlayerEntity() })
-            }
-
-            defendersName -> {
-                convertToJsonObject(functionResponse = fplApi.getDefenders().map { it.toPlayerEntity() })
-            }
-
-            goalkeepersName -> {
-                convertToJsonObject(functionResponse = fplApi.getGoalkeepers().map { it.toPlayerEntity() })
-            }
-
-            playerName -> {
-                convertToJsonObject(
-                    functionResponse = fplApi.getPlayer(id = extractId(functionCall.args))?.toPlayerEntity()
-                )
-            }
-
-            scoringDetailsName -> {
-                convertToJsonObject(functionResponse = fplApi.getScoringData()?.toScoreEntity())
-            }
-
-            else -> {
-                error("Unknown function name: ${functionCall.name}")
-            }
-        }
-
-        return convertToJsonObject(functionCallResponse)
-    }
-
-    private fun extractId(args: JsonObject): Int {
-        val id = args["id"] ?: error("Cannot get team name without id")
-
-        return id.jsonPrimitive.int
-    }
-
-    private inline fun <reified T>convertToJsonObject(functionResponse: T): JsonObject {
-        return buildJsonObject {
-            put("response", Json.encodeToJsonElement(functionResponse))
-        }
+        }.getOrNull()
     }
 }

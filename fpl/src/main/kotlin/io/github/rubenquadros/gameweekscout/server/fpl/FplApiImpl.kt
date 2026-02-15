@@ -1,14 +1,15 @@
 package io.github.rubenquadros.gameweekscout.server.fpl
 
+import ai.koog.agents.core.tools.annotations.LLMDescription
+import ai.koog.agents.core.tools.annotations.Tool
 import io.github.rubenquadros.gameweekscout.server.fpl.model.all.FplData
-import io.github.rubenquadros.gameweekscout.server.fpl.model.all.FplElement
-import io.github.rubenquadros.gameweekscout.server.fpl.model.all.FplScoring
-import io.github.rubenquadros.gameweekscout.server.fpl.model.all.FplTeam
 import io.github.rubenquadros.gameweekscout.server.fpl.model.fixture.FplFixture
-import io.ktor.client.HttpClient
-import io.ktor.client.call.body
-import io.ktor.client.request.get
+import io.github.rubenquadros.gameweekscout.server.fpl.model.simple.*
+import io.ktor.client.*
+import io.ktor.client.call.*
+import io.ktor.client.request.*
 
+@LLMDescription("Tools for getting FPL data")
 internal class FplApiImpl(
     private val httpClient: HttpClient
 ) : FplApi {
@@ -23,25 +24,29 @@ internal class FplApiImpl(
         return fplData
     }
 
-    override suspend fun getUpcomingFixtures(): List<FplFixture> {
+    @Tool
+    @LLMDescription("Get the upcoming fixtures for the next 6 game weeks")
+    override suspend fun getUpcomingFixtures(): List<FixtureEntity> {
         val response = httpClient.get("/api/fixtures?future=1")
 
         //get all upcoming fixture
         val fixtures = response.body<List<FplFixture>>()
 
         //filter upcoming 6 game weeks
-        val upcomingGameWeek = fixtures.firstOrNull()?.event
-
-        if (upcomingGameWeek == null) return emptyList()
+        val upcomingGameWeek = fixtures.firstOrNull()?.event ?: return emptyList()
 
         val nextSixGameWeeks = upcomingGameWeek + 5
 
         return fixtures.filter {
             it.event < nextSixGameWeeks
+        }.map {
+            it.toFixtureEntity()
         }
     }
 
-    override suspend fun getNextGameWeekFixtures(): List<FplFixture> {
+    @Tool
+    @LLMDescription("Get the upcoming fixtures for the next game week")
+    override suspend fun getNextGameWeekFixtures(): List<FixtureEntity> {
         val allUpcomingFixtures = getUpcomingFixtures()
 
         val nextGameWeek = allUpcomingFixtures.firstOrNull()?.event
@@ -49,57 +54,96 @@ internal class FplApiImpl(
         return allUpcomingFixtures.filter { it.event == nextGameWeek }
     }
 
-    override suspend fun getAllTeams(): List<FplTeam> {
+    @Tool
+    @LLMDescription("Get the details of all the teams in the current Premier League")
+    override suspend fun getAllTeams(): List<TeamEntity> {
         if (fplData == null) refreshData()
 
-        return fplData?.teams ?: emptyList()
+        return fplData?.teams?.map { it.toTeamEntity() } ?: emptyList()
     }
 
-    override suspend fun getTeam(id: Int): FplTeam? {
+    @Tool
+    @LLMDescription("Get the details of a particular team in the current Premier League")
+    override suspend fun getTeam(
+        @LLMDescription("The id of the team")
+        id: Int
+    ): TeamEntity? {
         if (fplData == null) refreshData()
 
-        return fplData?.teams?.firstOrNull { it.id == id }
+        return fplData?.teams?.firstOrNull { it.id == id }?.toTeamEntity()
     }
 
-    override suspend fun getAllPlayers(): List<FplElement> {
+//    @Tool
+//    @LLMDescription("Get the details of all the players playing in the current Premier League")
+//    override suspend fun getAllPlayers(): List<PlayerEntity> {
+//        if (fplData == null) refreshData()
+//
+//        return fplData?.elements?.map { it.toPlayerEntity() } ?: emptyList()
+//    }
+
+    @Tool
+    @LLMDescription("Get the details of all the mid field players playing in the current Premier League")
+    override suspend fun getMidFielders(): List<PlayerEntity> {
         if (fplData == null) refreshData()
 
-        return fplData?.elements ?: emptyList()
+        return fplData?.elements?.filter {
+            it.elementType == 3
+        }?.map {
+            it.toPlayerEntity()
+        } ?: emptyList()
+    }
+    @Tool
+    @LLMDescription("Get the details of all the forward players playing in the current Premier League")
+    override suspend fun getForwards(): List<PlayerEntity> {
+        if (fplData == null) refreshData()
+
+        return fplData?.elements?.filter {
+            it.elementType == 4
+        }?.map {
+            it.toPlayerEntity()
+        } ?: emptyList()
     }
 
-    override suspend fun getMidFielders(): List<FplElement> {
+    @Tool
+    @LLMDescription("Get the details of all the defensive players (defenders) playing in the current Premier League")
+    override suspend fun getDefenders(): List<PlayerEntity> {
         if (fplData == null) refreshData()
 
-        return fplData?.elements?.filter { it.elementType == 3 } ?: emptyList()
+        return fplData?.elements?.filter {
+            it.elementType == 2
+        }?.map {
+            it.toPlayerEntity()
+        } ?: emptyList()
     }
 
-    override suspend fun getForwards(): List<FplElement> {
+    @Tool
+    @LLMDescription("Get the details of all the goal keepers playing in the current Premier League")
+    override suspend fun getGoalkeepers(): List<PlayerEntity> {
         if (fplData == null) refreshData()
 
-        return fplData?.elements?.filter { it.elementType == 4 } ?: emptyList()
+        return fplData?.elements?.filter {
+            it.elementType == 1
+        }?.map {
+            it.toPlayerEntity()
+        } ?: emptyList()
     }
 
-    override suspend fun getDefenders(): List<FplElement> {
+    @Tool
+    @LLMDescription("Get the details of a particular player playing in the current Premier League")
+    override suspend fun getPlayer(
+        @LLMDescription("The id of the player")
+        id: Int
+    ): PlayerEntity? {
         if (fplData == null) refreshData()
 
-        return fplData?.elements?.filter { it.elementType == 2 } ?: emptyList()
+        return fplData?.elements?.firstOrNull { it.id == id }?.toPlayerEntity()
     }
 
-    override suspend fun getGoalkeepers(): List<FplElement> {
+    @Tool
+    @LLMDescription("Gets the details about how points are scored by players in the Fantasy Premier League.")
+    override suspend fun getScoringData(): ScoreEntity? {
         if (fplData == null) refreshData()
 
-        return fplData?.elements?.filter { it.elementType == 1 } ?: emptyList()
-    }
-
-    override suspend fun getPlayer(id: Int): FplElement? {
-        if (fplData == null) refreshData()
-
-        return fplData?.elements?.firstOrNull { it.id == id }
-    }
-
-    override suspend fun getScoringData(): FplScoring? {
-        if (fplData == null) refreshData()
-
-        return fplData?.gameConfig?.scoring
+        return fplData?.gameConfig?.scoring?.toScoreEntity()
     }
 }

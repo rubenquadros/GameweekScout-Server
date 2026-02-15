@@ -15,6 +15,8 @@ dependencies {
 
     implementation(libs.coroutines.jvm)
 
+    implementation(libs.koog.agent)
+
     implementation(libs.ktor.client)
 
     implementation(project(":client"))

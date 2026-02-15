@@ -26,8 +26,9 @@ internal fun Route.mainRoute() {
     val scoutService by inject<ScoutService>()
 
     post<MainRoute> {
-        val body = call.receive<List<Content>>()
-        val response = scoutService.getScoutAdvice(body)
+        val body = call.receive<Content>()
+
+        val response = scoutService.getScoutAdvice(body.query)
 
         if (response != null) {
             call.respond(status = HttpStatusCode.OK, message = response)

@@ -1,33 +1,34 @@
 package io.github.rubenquadros.gameweekscout.server.fpl
 
+import ai.koog.agents.core.tools.reflect.ToolSet
 import io.github.rubenquadros.gameweekscout.server.fpl.model.all.FplData
-import io.github.rubenquadros.gameweekscout.server.fpl.model.all.FplElement
-import io.github.rubenquadros.gameweekscout.server.fpl.model.all.FplScoring
-import io.github.rubenquadros.gameweekscout.server.fpl.model.all.FplTeam
-import io.github.rubenquadros.gameweekscout.server.fpl.model.fixture.FplFixture
+import io.github.rubenquadros.gameweekscout.server.fpl.model.simple.FixtureEntity
+import io.github.rubenquadros.gameweekscout.server.fpl.model.simple.PlayerEntity
+import io.github.rubenquadros.gameweekscout.server.fpl.model.simple.ScoreEntity
+import io.github.rubenquadros.gameweekscout.server.fpl.model.simple.TeamEntity
 
-interface FplApi {
+interface FplApi : ToolSet {
     suspend fun refreshData(): FplData?
 
-    suspend fun getUpcomingFixtures(): List<FplFixture>
+    suspend fun getUpcomingFixtures(): List<FixtureEntity>
 
-    suspend fun getNextGameWeekFixtures(): List<FplFixture>
+    suspend fun getNextGameWeekFixtures(): List<FixtureEntity>
 
-    suspend fun getAllTeams(): List<FplTeam>
+    suspend fun getAllTeams(): List<TeamEntity>
 
-    suspend fun getTeam(id: Int): FplTeam?
+    suspend fun getTeam(id: Int): TeamEntity?
 
-    suspend fun getAllPlayers(): List<FplElement>
+    //suspend fun getAllPlayers(): List<PlayerEntity>
 
-    suspend fun getMidFielders(): List<FplElement>
+    suspend fun getMidFielders(): List<PlayerEntity>
 
-    suspend fun getForwards(): List<FplElement>
+    suspend fun getForwards(): List<PlayerEntity>
 
-    suspend fun getDefenders(): List<FplElement>
+    suspend fun getDefenders(): List<PlayerEntity>
 
-    suspend fun getGoalkeepers(): List<FplElement>
+    suspend fun getGoalkeepers(): List<PlayerEntity>
 
-    suspend fun getPlayer(id: Int): FplElement?
+    suspend fun getPlayer(id: Int): PlayerEntity?
 
-    suspend fun getScoringData(): FplScoring?
+    suspend fun getScoringData(): ScoreEntity?
 }
