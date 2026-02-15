@@ -17,7 +17,7 @@ dependencies {
 
     implementation(libs.koog.agent)
 
-    implementation(libs.bundles.ktor.client)
+    implementation(libs.firebase.admin)
 
     implementation(project(":client"))
     implementation(project(":fpl"))

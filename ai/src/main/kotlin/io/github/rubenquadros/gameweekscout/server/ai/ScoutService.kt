@@ -1,6 +1,7 @@
 package io.github.rubenquadros.gameweekscout.server.ai
 
 import ai.koog.agents.core.agent.AIAgent
+import ai.koog.agents.core.agent.context.RollbackStrategy
 import ai.koog.agents.core.dsl.builder.forwardTo
 import ai.koog.agents.core.dsl.builder.strategy
 import ai.koog.agents.core.dsl.extension.nodeAppendPrompt
@@ -9,26 +10,25 @@ import ai.koog.agents.core.tools.reflect.tools
 import ai.koog.agents.ext.agent.subgraphWithTask
 import ai.koog.agents.features.eventHandler.feature.handleEvents
 import ai.koog.agents.snapshot.feature.Persistence
-import ai.koog.agents.snapshot.providers.InMemoryPersistenceStorageProvider
 import ai.koog.prompt.executor.clients.google.GoogleModels
 import ai.koog.prompt.executor.llms.all.simpleGoogleAIExecutor
 import io.github.rubenquadros.gameweekscout.server.ai.model.InputProcessResponse
 import io.github.rubenquadros.gameweekscout.server.ai.model.getGeminiConfig
+import io.github.rubenquadros.gameweekscout.server.ai.persistence.FirestorePersistenceProvider
 import io.github.rubenquadros.gameweekscout.server.fpl.FplApi
 
 interface ScoutService {
-    suspend fun getScoutAdvice(input: String): String?
+    suspend fun getScoutAdvice(input: String, userId: String): String?
 }
 
 internal class ScoutServiceImpl(
-    private val fplApi: FplApi
+    private val fplApi: FplApi,
+    private val persistence: FirestorePersistenceProvider,
 ) : ScoutService {
 
     private val fplToolsRegistry = ToolRegistry {
         tools(fplApi)
     }
-
-    private val memoryStorage = InMemoryPersistenceStorageProvider()
 
     private val scoutStrategy = strategy<String, String>("fpl-scout") {
         val inputProcessingPrompt by nodeAppendPrompt<String>("input-process-prompt") {
@@ -56,7 +56,7 @@ internal class ScoutServiceImpl(
             assistantResponseRepeatMax = 5
         ) { context ->
             """
-                User query: "${context.originalInput}
+                User query: "${context.originalInput}"
             """.trimIndent()
         }
 
@@ -70,16 +70,19 @@ internal class ScoutServiceImpl(
 
     private val geminiConfig = getGeminiConfig()
 
-    override suspend fun getScoutAdvice(input: String): String? {
-        return runCatching {
+    override suspend fun getScoutAdvice(input: String, userId: String): String? {
+        val result = runCatching {
             val agent = AIAgent(
+                id = userId,
                 strategy = scoutStrategy,
                 promptExecutor = simpleGoogleAIExecutor(apiKey = geminiConfig.apiKey),
                 llmModel = GoogleModels.Gemini2_5Flash,
                 toolRegistry = fplToolsRegistry
             ) {
                 install(Persistence) {
-                    storage = memoryStorage
+                    storage = persistence
+                    enableAutomaticPersistence = true
+                    rollbackStrategy = RollbackStrategy.MessageHistoryOnly
                 }
 
                 handleEvents { eventHandler() }
@@ -88,5 +91,11 @@ internal class ScoutServiceImpl(
             agent.run(input)
 
         }.getOrNull()
+
+        if (result != null) {
+            persistence.saveAgentResponse(userId, result)
+        }
+
+        return result
     }
 }
