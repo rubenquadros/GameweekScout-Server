@@ -15,9 +15,9 @@ dependencies {
 
     implementation(libs.coroutines.jvm)
 
-    implementation(libs.ktor.client)
+    implementation(libs.koog.agent)
 
-    implementation(project(":client"))
+    implementation(libs.bundles.ktor.client)
 
     testImplementation(libs.koin.test)
     testImplementation(libs.kotlin.test)

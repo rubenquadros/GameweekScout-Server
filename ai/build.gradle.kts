@@ -15,9 +15,10 @@ dependencies {
 
     implementation(libs.coroutines.jvm)
 
-    implementation(libs.bundles.ktor.client)
+    implementation(libs.koog.agent)
 
-    implementation(project(":client"))
+    implementation(libs.firebase.admin)
+
     implementation(project(":fpl"))
 
     testImplementation(libs.koin.test)

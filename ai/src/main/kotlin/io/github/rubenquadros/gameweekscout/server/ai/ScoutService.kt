@@ -1,165 +1,125 @@
 package io.github.rubenquadros.gameweekscout.server.ai
 
-import io.github.rubenquadros.gameweekscout.server.ai.instruction.fplTool
-import io.github.rubenquadros.gameweekscout.server.ai.instruction.functions.*
-import io.github.rubenquadros.gameweekscout.server.ai.instruction.scoutInstruction
-import io.github.rubenquadros.gameweekscout.server.ai.model.*
-import io.github.rubenquadros.gameweekscout.server.ai.model.fpl.toFixtureEntity
-import io.github.rubenquadros.gameweekscout.server.ai.model.fpl.toPlayerEntity
-import io.github.rubenquadros.gameweekscout.server.ai.model.fpl.toScoreEntity
-import io.github.rubenquadros.gameweekscout.server.ai.model.fpl.toTeamEntity
+import ai.koog.agents.core.agent.AIAgent
+import ai.koog.agents.core.agent.context.RollbackStrategy
+import ai.koog.agents.core.dsl.builder.forwardTo
+import ai.koog.agents.core.dsl.builder.strategy
+import ai.koog.agents.core.dsl.extension.nodeAppendPrompt
+import ai.koog.agents.core.dsl.extension.replaceHistoryWithTLDR
+import ai.koog.agents.core.tools.ToolRegistry
+import ai.koog.agents.core.tools.reflect.tools
+import ai.koog.agents.ext.agent.subgraphWithTask
+import ai.koog.agents.features.eventHandler.feature.handleEvents
+import ai.koog.agents.memory.feature.history.RetrieveFactsFromHistory
+import ai.koog.agents.snapshot.feature.Persistence
+import ai.koog.prompt.executor.llms.all.simpleGoogleAIExecutor
+import io.github.rubenquadros.gameweekscout.server.ai.model.InputProcessResponse
+import io.github.rubenquadros.gameweekscout.server.ai.model.getGeminiConfig
+import io.github.rubenquadros.gameweekscout.server.ai.persistence.FirestorePersistenceProvider
 import io.github.rubenquadros.gameweekscout.server.fpl.FplApi
-import io.ktor.client.*
-import io.ktor.client.call.*
-import io.ktor.client.request.*
-import io.ktor.http.*
-import kotlinx.serialization.json.*
 
 interface ScoutService {
-    suspend fun getScoutAdvice(contents: List<Content>): ScoutResponse?
+    suspend fun getScoutAdvice(input: String, userId: String): String?
 }
 
 internal class ScoutServiceImpl(
-    private val httpClient: HttpClient,
-    private val fplApi: FplApi
+    private val fplApi: FplApi,
+    private val persistence: FirestorePersistenceProvider,
 ) : ScoutService {
 
     private val geminiConfig = getGeminiConfig()
-    private val conversationHistory: MutableList<Content> = mutableListOf()
-    private var scoutResponse: ScoutResponse? = null
 
-    override suspend fun getScoutAdvice(contents: List<Content>): ScoutResponse? {
-        val maxLoops = 5
-        var currentLoop = 0
+    private val fplToolsRegistry = ToolRegistry {
+        tools(fplApi)
+    }
 
-        conversationHistory.apply {
-            clear()
-            addAll(contents)
+    private val scoutStrategy = strategy<String, String>("fpl-scout") {
+        val inputProcessingPrompt by nodeAppendPrompt<String>("input-process-prompt") {
+            system(inputProcessInstruction)
         }
 
-        while (currentLoop < maxLoops) {
-            currentLoop++
-
-            scoutResponse = askScout(conversationHistory)
-
-            val functionCalls = getFunctionCallOrNull(scoutResponse!!)
-
-            if (functionCalls.isNullOrEmpty()) break
-
-            //add model response
-            conversationHistory.add(
-                Content(role = "model", parts = scoutResponse?.candidates?.firstOrNull()?.content?.parts ?: emptyList())
-            )
-
-            //execute function calls
-            val toolResponses = functionCalls.map { functionCall ->
-                println("Calling function: ${functionCall.name}")
-                println("Function args: ${functionCall.args.values}")
-
-                val functionResponse = FunctionResponse(
-                    name = functionCall.name,
-                    response = executeFunctionCall(functionCall)
-                )
-
-                Content(role = "tool", parts = listOf(Part(functionResponse = functionResponse)))
-            }
-
-            //add to conversation for new call
-            conversationHistory.addAll(toolResponses)
+        val processInput by subgraphWithTask<String, InputProcessResponse>(
+            name = "input-processor",
+            llmModel = geminiConfig.getLLMModel(geminiConfig.model.inputProcess),
+            assistantResponseRepeatMax = 1
+        ) { input ->
+            """
+                User query: "$input"
+            """.trimIndent()
         }
 
-        return scoutResponse
-    }
+        val evaluateCompression by node<InputProcessResponse, InputProcessResponse> { input ->
+            llm.readSession {
+                val messages = prompt.messages
+                val shouldCompress = messages.size > 20 && messages.sumOf { it.content.length } > 200_000
 
-    private suspend fun askScout(contents: List<Content>): ScoutResponse {
-        return httpClient.post {
-            val apiRequest = ScoutRequest(
-                systemInstruction = scoutInstruction,
-                tools = listOf(fplTool),
-                contents = contents
-            )
-
-            url {
-                appendPathSegments("/${geminiConfig.model}:generateContent")
-                parameters.append("key", geminiConfig.apiKey)
+                input.copy(shouldCompress = shouldCompress)
             }
+        }
 
-            setBody(apiRequest)
-
-        }.body<ScoutResponse>()
-    }
-
-    private fun getFunctionCallOrNull(scoutResponse: ScoutResponse): List<FunctionCall>? {
-        return scoutResponse.candidates.firstOrNull()?.content?.parts?.mapNotNull { it.functionCall }?.distinctBy { it.name }
-    }
-
-    private suspend fun executeFunctionCall(functionCall: FunctionCall): JsonObject {
-        val functionCallResponse = when (functionCall.name) {
-            upcomingFixturesName -> {
-                convertToJsonObject(functionResponse = fplApi.getUpcomingFixtures().map { it.toFixtureEntity() })
-            }
-
-            nextGameWeekFixturesName -> {
-                convertToJsonObject(functionResponse = fplApi.getNextGameWeekFixtures().map { it.toFixtureEntity() })
-            }
-
-            allTeamsName -> {
-                convertToJsonObject(functionResponse = fplApi.getAllTeams().map { it.toTeamEntity() })
-            }
-
-            teamName -> {
-                convertToJsonObject(
-                    functionResponse = fplApi.getTeam(id = extractId(functionCall.args))?.toTeamEntity()
+        val compressHistory by node <InputProcessResponse, InputProcessResponse>("compress-history") { input ->
+            llm.writeSession {
+                model = geminiConfig.getLLMModel(geminiConfig.model.retrieval)
+                replaceHistoryWithTLDR(
+                    strategy = RetrieveFactsFromHistory(concepts = fplConceptsToCompressHistory)
                 )
             }
 
-            allPlayersName -> {
-                convertToJsonObject(functionResponse = fplApi.getAllPlayers().map { it.toPlayerEntity() })
-            }
-
-            forwardsName -> {
-                convertToJsonObject(functionResponse = fplApi.getForwards().map { it.toPlayerEntity() })
-            }
-
-            midfieldersName -> {
-                convertToJsonObject(functionResponse = fplApi.getMidFielders().map { it.toPlayerEntity() })
-            }
-
-            defendersName -> {
-                convertToJsonObject(functionResponse = fplApi.getDefenders().map { it.toPlayerEntity() })
-            }
-
-            goalkeepersName -> {
-                convertToJsonObject(functionResponse = fplApi.getGoalkeepers().map { it.toPlayerEntity() })
-            }
-
-            playerName -> {
-                convertToJsonObject(
-                    functionResponse = fplApi.getPlayer(id = extractId(functionCall.args))?.toPlayerEntity()
-                )
-            }
-
-            scoringDetailsName -> {
-                convertToJsonObject(functionResponse = fplApi.getScoringData()?.toScoreEntity())
-            }
-
-            else -> {
-                error("Unknown function name: ${functionCall.name}")
-            }
+            input
         }
 
-        return convertToJsonObject(functionCallResponse)
-    }
-
-    private fun extractId(args: JsonObject): Int {
-        val id = args["id"] ?: error("Cannot get team name without id")
-
-        return id.jsonPrimitive.int
-    }
-
-    private inline fun <reified T>convertToJsonObject(functionResponse: T): JsonObject {
-        return buildJsonObject {
-            put("response", Json.encodeToJsonElement(functionResponse))
+        val scoutAdvicePrompt by nodeAppendPrompt<InputProcessResponse>("scout-advice-prompt") {
+            system(scoutAdviceInstruction)
         }
+
+        val provideSuggestion by subgraphWithTask<InputProcessResponse, String>(
+            name = "scout-advisor",
+            llmModel = geminiConfig.getLLMModel(geminiConfig.model.suggestion),
+            tools = fplToolsRegistry.tools,
+            assistantResponseRepeatMax = 5
+        ) { context ->
+            """
+                User query: "${context.originalInput}"
+            """.trimIndent()
+        }
+
+        edge(nodeStart forwardTo inputProcessingPrompt)
+        edge(inputProcessingPrompt forwardTo processInput)
+        edge(processInput forwardTo nodeFinish onCondition { !it.shouldProceed } transformed { it.response })
+        edge(processInput forwardTo evaluateCompression onCondition { it.shouldProceed })
+        edge(evaluateCompression forwardTo compressHistory onCondition { it.shouldCompress })
+        edge(evaluateCompression forwardTo scoutAdvicePrompt onCondition { !it.shouldCompress })
+        edge(compressHistory forwardTo scoutAdvicePrompt)
+        edge(scoutAdvicePrompt forwardTo provideSuggestion)
+        edge(provideSuggestion forwardTo nodeFinish)
+    }
+
+    override suspend fun getScoutAdvice(input: String, userId: String): String? {
+        val result = runCatching {
+            val agent = AIAgent(
+                id = userId,
+                strategy = scoutStrategy,
+                promptExecutor = simpleGoogleAIExecutor(apiKey = geminiConfig.apiKey),
+                llmModel = geminiConfig.getLLMModel(geminiConfig.model.default),
+                toolRegistry = fplToolsRegistry
+            ) {
+                install(Persistence) {
+                    storage = persistence
+                    enableAutomaticPersistence = true
+                    rollbackStrategy = RollbackStrategy.MessageHistoryOnly
+                }
+
+                handleEvents { eventHandler() }
+            }
+
+            agent.run(input)
+
+        }.getOrNull()
+
+        if (result != null) {
+            persistence.saveAgentResponse(userId, result)
+        }
+
+        return result
     }
 }

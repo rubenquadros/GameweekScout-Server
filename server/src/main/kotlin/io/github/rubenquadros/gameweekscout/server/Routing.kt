@@ -26,8 +26,10 @@ internal fun Route.mainRoute() {
     val scoutService by inject<ScoutService>()
 
     post<MainRoute> {
-        val body = call.receive<List<Content>>()
-        val response = scoutService.getScoutAdvice(body)
+        val userId = call.request.headers[USER_ID_HEADER].orEmpty()
+        val body = call.receive<Content>()
+
+        val response = scoutService.getScoutAdvice(input = body.query, userId = userId)
 
         if (response != null) {
             call.respond(status = HttpStatusCode.OK, message = response)
@@ -39,3 +41,5 @@ internal fun Route.mainRoute() {
 
 @Resource("/scout-advice")
 internal class MainRoute
+
+private const val USER_ID_HEADER = "User-ID"

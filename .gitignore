@@ -29,4 +29,5 @@ replay_pid*
 .gradle
 build/
 /local.properties
+admin_access.json
 .DS_Store

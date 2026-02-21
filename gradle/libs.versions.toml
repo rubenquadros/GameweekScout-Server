@@ -6,6 +6,8 @@ koin = "4.1.0-Beta4"
 koin-annotation = "2.0.0-Beta3"
 ksp = "2.0.20-1.0.25"
 coroutines = "1.10.1"
+koog = "0.6.2"
+firebase = "9.7.1"
 
 [libraries]
 # ktor server
@@ -17,6 +19,7 @@ ktor-logback = { module = "ch.qos.logback:logback-classic", version.ref = "logba
 ktor-resources = { module = "io.ktor:ktor-server-resources", version.ref = "ktor" }
 ktor-test = { module = "io.ktor:ktor-server-test-host", version.ref = "ktor" }
 ktor-status-pages = { module = "io.ktor:ktor-server-status-pages", version.ref = "ktor" }
+ktor-cors = { module = "io.ktor:ktor-server-cors", version.ref = "ktor" }
 
 # ktor client
 ktor-client = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
@@ -36,10 +39,16 @@ koin-test = { module = "io.insert-koin:koin-test", version.ref = "koin" }
 coroutines-jvm = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm", version.ref = "coroutines" }
 coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 
+# koog
+koog-agent = { module = "ai.koog:koog-agents", version.ref = "koog" }
+
+# firebase
+firebase-admin = { module = "com.google.firebase:firebase-admin", version.ref = "firebase" }
+
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 
 [bundles]
-ktor = ["ktor-content-negotiation", "ktor-core-jvm", "ktor-serialization", "ktor-netty", "ktor-logback", "ktor-resources", "ktor-status-pages"]
+ktor = ["ktor-content-negotiation", "ktor-core-jvm", "ktor-serialization", "ktor-netty", "ktor-logback", "ktor-resources", "ktor-status-pages", "ktor-cors"]
 ktor-client = ["ktor-client", "ktor-client-okhttp", "ktor-client-content-negotiation", "ktor-client-logging", "ktor-serialization"]
 koin = ["koin-core", "koin-ktor", "koin-logger"]
 

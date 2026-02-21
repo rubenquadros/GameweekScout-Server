@@ -1,5 +1,6 @@
 package io.github.rubenquadros.gameweekscout.server.fpl.model.all
 
+import ai.koog.agents.core.tools.annotations.LLMDescription
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -78,6 +79,7 @@ data class FplScoring(
 )
 
 @Serializable
+@LLMDescription("A mapping of point values to player positions (GKP, DEF, MID, FWD).")
 data class PlayerScores(
     @SerialName("DEF")
     val def: Int,
