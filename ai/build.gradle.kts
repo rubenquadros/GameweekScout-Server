@@ -19,7 +19,6 @@ dependencies {
 
     implementation(libs.firebase.admin)
 
-    implementation(project(":client"))
     implementation(project(":fpl"))
 
     testImplementation(libs.koin.test)

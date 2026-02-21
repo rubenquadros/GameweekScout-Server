@@ -17,9 +17,7 @@ dependencies {
 
     implementation(libs.koog.agent)
 
-    implementation(libs.ktor.client)
-
-    implementation(project(":client"))
+    implementation(libs.bundles.ktor.client)
 
     testImplementation(libs.koin.test)
     testImplementation(libs.kotlin.test)

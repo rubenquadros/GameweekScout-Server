@@ -5,13 +5,14 @@ import ai.koog.agents.core.tools.annotations.Tool
 import io.github.rubenquadros.gameweekscout.server.fpl.model.all.FplData
 import io.github.rubenquadros.gameweekscout.server.fpl.model.fixture.FplFixture
 import io.github.rubenquadros.gameweekscout.server.fpl.model.simple.*
+import io.github.rubenquadros.gameweekscout.server.fpl.remote.apiClient
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 
 @LLMDescription("Tools for getting FPL data")
 internal class FplApiImpl(
-    private val httpClient: HttpClient
+    private val httpClient: HttpClient = apiClient
 ) : FplApi {
 
     private var fplData: FplData? = null
