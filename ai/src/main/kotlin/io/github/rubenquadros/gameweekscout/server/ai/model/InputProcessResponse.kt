@@ -15,5 +15,6 @@ data class InputProcessResponse(
     @property:LLMDescription("Response of the LLM in the current step")
     val response: String,
     @property:LLMDescription("The original user query which is needed in the next step")
-    val originalInput: String
+    val originalInput: String,
+    val shouldCompress: Boolean = false
 )
