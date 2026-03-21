@@ -42,4 +42,4 @@ internal fun Route.mainRoute() {
 @Resource("/scout-advice")
 internal class MainRoute
 
-private const val USER_ID_HEADER = "User-ID"
+internal const val USER_ID_HEADER = "User-ID"
